@@ -1,0 +1,271 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Expense Tracker</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <div>
+            <h1>☁ Cloud Expense Tracker</h1>
+            <p>Manage your money smarter</p>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="summary">
+            <div class="card income">
+                <p>Total Income</p>
+                <h2 id="income">₹0.00</h2>
+            </div>
+            <div class="card expense">
+                <p>Total Expenses</p>
+                <h2 id="expenses">₹0.00</h2>
+            </div>
+            <div class="card balance">
+                <p>Remaining Balance</p>
+                <h2 id="balance">₹0.00</h2>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Add Transaction</h2>
+            <form id="transactionForm">
+                <label for="description">Description</label>
+                <input id="description" type="text"
+                       placeholder="e.g. Salary or Food" required>
+
+                <label for="amount">Amount (₹)</label>
+                <input id="amount" type="number"
+                       min="0.01" step="0.01"
+                       placeholder="Enter amount" required>
+
+                <label for="type">Transaction Type</label>
+                <select id="type" required>
+                    <option value="income">Income</option>
+                    <option value="expense">Expense</option>
+                </select>
+
+                <label for="date">Date</label>
+                <input id="date" type="date" required>
+
+                <button type="submit">Add Transaction</button>
+            </form>
+        </section>
+
+        <section class="panel">
+            <h2>Monthly Summary</h2>
+            <label for="month">Select Month</label>
+            <input type="month" id="month">
+            <div class="monthly">
+                <p>Monthly Income: <strong id="monthIncome">₹0.00</strong></p>
+                <p>Monthly Expenses: <strong id="monthExpenses">₹0.00</strong></p>
+                <p>Monthly Savings: <strong id="monthBalance">₹0.00</strong></p>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Transaction History</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Description</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Date</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionList"></tbody>
+                </table>
+            </div>
+            <p id="emptyMessage">No transactions yet. Add your first transaction!</p>
+            <button class="clear-btn" id="clearAll" type="button">
+                Clear All Transactions
+            </button>
+        </section>
+    </main>
+
+    <footer>
+        <p>Cloud Expense Tracker | Built with Python Flask, HTML, CSS and JavaScript</p>
+        <p>Data is stored locally in your browser.</p>
+    </footer>
+
+    <script>
+        const STORAGE_KEY = "cloudExpenseTrackerTransactions";
+
+        const form = document.getElementById("transactionForm");
+        const descriptionInput = document.getElementById("description");
+        const amountInput = document.getElementById("amount");
+        const typeInput = document.getElementById("type");
+        const dateInput = document.getElementById("date");
+        const monthInput = document.getElementById("month");
+
+        const money = amount =>
+            new Intl.NumberFormat("en-IN", {
+                style: "currency",
+                currency: "INR"
+            }).format(amount);
+
+        function todayString() {
+            const now = new Date();
+            const localDate = new Date(
+                now.getTime() - now.getTimezoneOffset() * 60000
+            );
+            return localDate.toISOString().slice(0, 10);
+        }
+
+        dateInput.value = todayString();
+        monthInput.value = todayString().slice(0, 7);
+
+        function loadTransactions() {
+            try {
+                const saved = JSON.parse(
+                    localStorage.getItem(STORAGE_KEY) || "[]"
+                );
+                return Array.isArray(saved) ? saved : [];
+            } catch {
+                return [];
+            }
+        }
+
+        let transactions = loadTransactions();
+
+        function saveTransactions() {
+            try {
+                localStorage.setItem(
+                    STORAGE_KEY,
+                    JSON.stringify(transactions)
+                );
+            } catch {
+                alert("Could not save data in browser storage.");
+            }
+        }
+
+        function total(items, type) {
+            return items
+                .filter(item => item.type === type)
+                .reduce((sum, item) => sum + item.amount, 0);
+        }
+
+        function render() {
+            const income = total(transactions, "income");
+            const expenses = total(transactions, "expense");
+
+            document.getElementById("income").textContent = money(income);
+            document.getElementById("expenses").textContent = money(expenses);
+            document.getElementById("balance").textContent =
+                money(income - expenses);
+
+            const selectedMonth = monthInput.value;
+            const monthlyTransactions = transactions.filter(
+                item => item.date.slice(0, 7) === selectedMonth
+            );
+
+            const monthlyIncome = total(monthlyTransactions, "income");
+            const monthlyExpenses = total(monthlyTransactions, "expense");
+
+            document.getElementById("monthIncome").textContent =
+                money(monthlyIncome);
+            document.getElementById("monthExpenses").textContent =
+                money(monthlyExpenses);
+            document.getElementById("monthBalance").textContent =
+                money(monthlyIncome - monthlyExpenses);
+
+            const list = document.getElementById("transactionList");
+            list.replaceChildren();
+
+            document.getElementById("emptyMessage").hidden =
+                transactions.length !== 0;
+
+            [...transactions]
+                .sort((a, b) => b.date.localeCompare(a.date))
+                .forEach(item => {
+                    const row = document.createElement("tr");
+
+                    function addCell(value) {
+                        const cell = document.createElement("td");
+                        cell.textContent = value;
+                        row.appendChild(cell);
+                        return cell;
+                    }
+
+                    addCell(item.description);
+
+                    const typeCell = addCell(
+                        item.type === "income" ? "Income" : "Expense"
+                    );
+                    typeCell.className = item.type;
+
+                    addCell(
+                        (item.type === "income" ? "+" : "-") +
+                        money(item.amount)
+                    );
+                    addCell(item.date);
+
+                    const actionCell = addCell("");
+                    const deleteButton = document.createElement("button");
+                    deleteButton.textContent = "Delete";
+                    deleteButton.className = "delete-btn";
+                    deleteButton.type = "button";
+                    deleteButton.addEventListener("click", () => {
+                        transactions = transactions.filter(
+                            transaction => transaction.id !== item.id
+                        );
+                        saveTransactions();
+                        render();
+                    });
+                    actionCell.appendChild(deleteButton);
+
+                    list.appendChild(row);
+                });
+        }
+
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+
+            const description = descriptionInput.value.trim();
+            const amount = Number(amountInput.value);
+            const date = dateInput.value;
+
+            if (!description || !Number.isFinite(amount) ||
+                amount <= 0 || !date) {
+                alert("Please enter valid transaction details.");
+                return;
+            }
+
+            transactions.push({
+                id: crypto.randomUUID(),
+                description,
+                amount,
+                type: typeInput.value,
+                date
+            });
+
+            saveTransactions();
+            form.reset();
+            dateInput.value = todayString();
+            render();
+        });
+
+        monthInput.addEventListener("change", render);
+
+        document.getElementById("clearAll").addEventListener("click", () => {
+            if (transactions.length === 0) return;
+
+            if (confirm("Delete all transactions? This cannot be undone.")) {
+                transactions = [];
+                saveTransactions();
+                render();
+            }
+        });
+
+        render();
+    </script>
+</body>
+</html>
